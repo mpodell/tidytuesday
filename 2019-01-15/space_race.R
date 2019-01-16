@@ -132,51 +132,17 @@ launches %>%
   filter(
     state_code == "I-ESA"
   ) %>% select(type, mission, category, launch_year)
-# PLOT SOMETHING ----------------------------------------------------------
-
-# success rate by year and agency_type
-# year by country
-
-global <- launches %>%
-  group_by(
-    state_code,
-    agency_type,
-    launch_year,
-    category
-  ) %>%
-  summarize(
-    count = n()
-  ) %>%
-  spread(
-    category,
-    count,
-    fill = 0     # implicit missing values need to be zero for success rate computation
-  ) %>%
-  mutate(
-    success_rate = O / (O + F)
-  ) %>% 
-  ungroup %>%
-  group_by(
-    state_code,
-    agency_type
-  ) %>%
-  mutate(
-    country_start = min(launch_year),
-    experience = launch_year - country_start,
-    persistence = n()
-  ) 
 
 
-mod <- lm(success_rate ~ experience + agency_type + state_code, data = global)
-summary(mod)
+# POSE QUESTION AND PLOT FOR ANSWER ---------------------------------------
 
-global %>%
-  ggplot(
-    aes(experience, success_rate)
-  ) + 
-  geom_point(aes(color = agency_type), alpha = 0.2) + 
-  geom_smooth(aes(color = agency_type), method = "loess", se = FALSE) 
+## Do different agency types have different learning curves?
+## Hypothesis:  state agencies will be cautious and lead, 
+##              private firms will build on state knowledge and contracts but will be
+##                cautious given that they rely on state support
+##              startups will be quick, move up the learning curve quickly but cut corners
 
+# Over all states
 launches %>%
   group_by(
     state_code,
@@ -185,10 +151,132 @@ launches %>%
   mutate(
     country_start = min(launch_year),
     experience = launch_year - country_start,
-    persistence = n(),
+    # persistence = n(),
     launch_success = ifelse(category == "O", 1, 0)
   ) %>%
-ggplot(
+  ggplot(
     aes(experience, launch_success, color = agency_type)
   ) +
-  geom_smooth(se = FALSE)
+  geom_smooth(se = FALSE) +
+  labs(title = "Learning Curves by Agency Type\n(All Countries)", 
+       x = "Experience (years)", y = "Annual Launch Success Rate",
+       color = "Agency Type") +
+  scale_y_continuous(labels = scales::percent)
+
+
+# Just states with state, private, and start-ups
+varied <- launches %>%
+  select(
+    state_code, 
+    agency_type
+  ) %>%
+  unique %>%
+  group_by(
+    state_code
+  ) %>%
+  summarize(
+    eco = n()
+  ) 
+
+
+launches %>%
+  filter(
+    state_code %in% (varied %>% filter(eco > 2) %>% select(state_code))
+  ) %>%
+  group_by(
+    state_code,
+    agency_type
+  ) %>%
+  mutate(
+    country_start = min(launch_year),
+    experience = launch_year - country_start,
+    # persistence = n(),
+    launch_success = ifelse(category == "O", 1, 0)
+  ) %>%
+  ggplot(
+    aes(experience, launch_success, color = agency_type)
+  ) +
+  geom_smooth() +
+  labs(title = paste0("Learning Curves by Agency Type\n(", 
+                      (varied %>% filter(eco > 2) %>% select(state_code)), " only)"), 
+       x = "Experience (years)", y = "Annual Launch Success Rate",
+       color = "Agency Type") +
+  scale_y_continuous(labels = scales::percent)
+
+
+
+p <- launches %>%
+  filter(
+    state_code %in% (varied %>% filter(eco > 2) %>% select(state_code))
+  ) %>%
+  group_by(
+    state_code,
+    agency_type
+  ) %>%
+  mutate(
+    country_start = min(launch_year),
+    experience = launch_year - country_start,
+    # persistence = n(),
+    launch_success = ifelse(category == "O", 1, 0)
+  ) %>%
+  ggplot(
+    aes(launch_year, launch_success, color = agency_type)
+  ) +
+  geom_smooth() +
+  labs(title = paste0("Learning Curves by Agency Type\n(", 
+                      (varied %>% filter(eco > 2) %>% select(state_code)), " only)"), 
+       x = "Year", y = "Annual Launch Success Rate",
+       color = "Agency Type") +
+  scale_y_continuous(labels = scales::percent)
+
+
+# learning curve by countries with state only; state + private; & state, private, + startup
+launches %>%
+  left_join(., varied, by = "state_code") %>%
+  group_by(
+    state_code
+  ) %>%
+  mutate(
+    country_start = min(launch_year),
+    experience = launch_year - country_start,
+    launch_success = ifelse(category == "O", 1, 0)
+  ) %>% 
+  ggplot(
+    aes(experience, launch_success, color = factor(eco))
+  ) +
+  geom_smooth() +
+  labs(title = "Learning Curves by Agency Type Count\n(All Countries)", 
+       x = "Experience (years)", y = "Annual Launch Success Rate",
+       color = "Agency Type") +
+  scale_y_continuous(labels = scales::percent)
+
+# by year
+launches %>%
+  left_join(., varied, by = "state_code") %>%
+  group_by(
+    state_code
+  ) %>%
+  mutate(
+    country_start = min(launch_year),
+    experience = launch_year - country_start,
+    launch_success = ifelse(category == "O", 1, 0)
+  ) %>% 
+  ggplot(
+    aes(launch_year, launch_success, color = factor(eco))
+  ) +
+  geom_smooth() +
+  labs(title = "Learning Curves by Agency Type Count\n(All Countries)", 
+       x = "Year", y = "Annual Launch Success Rate",
+       color = "Agency Type") +
+  scale_y_continuous(labels = scales::percent)
+
+file_name <- "tidytuesday_2019-01-15_mpo.jpeg"
+
+jpeg(file = file_name, 
+     width = 9, height = 6, units = "in", pointsize = 4, res = 300)
+
+p
+
+dev.off()
+
+
